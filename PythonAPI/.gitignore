@@ -1,0 +1,9 @@
+*.pyc
+.project
+.pydevproject
+
+# Not adding early collected data
+*/data/*
+
+# Not adding image model due to large size
+*/models/mlp/dest_start_img_models/*

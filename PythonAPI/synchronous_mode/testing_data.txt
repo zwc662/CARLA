@@ -1,0 +1,16 @@
+# format to be passed to controller.control method
+future_wps
+[<carla.libcarla.Waypoint object at 0x7f7db05c73f8>, <carla.libcarla.Waypoint object at 0x7f7db05c7348>, <carla.libcarla.Waypoint object at 0x7f7db05c74a8>, <carla.libcarla.Waypoint object at 0x7f7db05c7500>, <carla.libcarla.Waypoint object at 0x7f7db05c7558>, <carla.libcarla.Waypoint object at 0x7f7db05c75b0>]
+measurements
+{'t': <carla.libcarla.Transform object at 0x7f7db05c4570>, 'v': <carla.libcarla.Vector3D object at 0x7f7db05c7240>}
+
+# data
+[{'waypoint': array([-117.09651947,  136.61997986,    0.        ,    0.        ,
+         -1.29680216,    0.        ])}, {'waypoint': array([-116.59664917,  136.6086731 ,    0.        ,    0.        ,
+         -1.29680216,    0.        ])}, {'waypoint': array([-116.09677887,  136.59735107,    0.        ,    0.        ,
+         -1.29680216,    0.        ])}, {'waypoint': array([-115.59690094,  136.58604431,    0.        ,    0.        ,
+         -1.29680216,    0.        ])}, {'waypoint': array([-115.09703064,  136.57472229,    0.        ,    0.        ,
+         -1.29680216,    0.        ])}, {'waypoint': array([-114.59716034,  136.56340027,    0.        ,    0.        ,
+         -1.29680216,    0.        ])}, {'measurements.t': array([-1.17103600e+02,  1.36307205e+02, -6.69517508e-03, -4.19127703e-01,
+        6.36095715e+00,  5.62562287e-01])}, {'measurements.v': array([2.14972687e+00, 1.05032337e+00, 1.31203706e-05])}]
+

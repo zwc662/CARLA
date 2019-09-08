@@ -1,0 +1,2 @@
+num_wps,lr,batch_size,last_train_loss,optimizer
+10,0.001,64,5.65812254665486e-05,Adam

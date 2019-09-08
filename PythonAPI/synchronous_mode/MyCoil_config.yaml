@@ -1,0 +1,22 @@
+### General configuration parameters
+#### Model Related Parameters ####
+# Network Parameters #
+# MODEL_TYPE: 'coil-icra' # The type of model. Defines which modules the model has.
+MODEL_CONFIGURATION:  # Based on the MODEL_TYPE, we specify the structure
+  perception:  # The module that process the image input, it ouput the number of classes
+    res:
+      name: 'resnet34'
+      pretrained: True
+      num_classes: 512
+  measurement:  # The module the process the input float data, change from "measurements" to "measurement" due to size mismatch
+    fc:  # Easy to configure fully connected layer
+      neurons: [128, 128] # In addition to measurement input, each position here add a new layer with the specified number of neurons
+      dropouts: [0.0, 0.0]
+  join:  # The module that joins both the measurements and the perception
+    fc:
+      neurons: [512]
+      dropouts: [0.0]
+  controller:
+    fc:
+      neurons: [256, 64, 8]
+      dropouts: [0.0, 0.0, 0.0]
