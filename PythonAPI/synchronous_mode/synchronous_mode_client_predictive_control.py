@@ -24,9 +24,11 @@ try:
 except IndexError:
     pass
 
+sys.path.append('../carla/')
 import carla
 from utils import *
 
+import agents
 import random
 
 try:
@@ -55,7 +57,7 @@ from torch.utils.data import Dataset, DataLoader
 torch.set_default_dtype(torch.float32)
 dtype = torch.float32
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-device = 'cpu'
+#device = 'cpu'
 save_dir_base = 'data/testing/'
 
 
@@ -63,10 +65,23 @@ prev_epoch = 93999
 from_epoch = 95000
 to_epoch = from_epoch + 2000
 
-model_path = "./checkpoints/" + \
+# Pretrained Policy
+checkpoint_path = "IJCAI/mlp_dict_nx=20_wps5_spd_30_lr0.0001_bs32_optimSGD_ep63999_ep66000.pth"
+checkpoint_path= "IJCAI/1/" + \
         "mlp_dict_nx=20_wps5_spd_30_lr0.0001_bs32_optimSGD_ep63999_ep66000.pth"
-        #"mlp_dict_nx=20_wps5_spd_30_lr0.0001_bs32_optimSGD_ep{}_friction_safe_150cm_train_ep{}.pth".format(\
-        #prev_epoch, from_epoch)
+
+# Fine-Tuned Policy
+# Friction loss
+#checkpoint_path = "IJCAI/mlp_dict_nx=20_wps5_spd_30_lr0.0001_bs32_optimSGD_ep65999_friction_safe_150cm_train_ep71000.pth"
+# Final
+#checkpoint_path = "IJCAI/mlp_dict_nx=20_wps5_spd_30_lr0.0001_bs32_optimSGD_ep70999_friction_safe_150cm_train_ep76000.pth"
+
+# Repaired Policy
+#checkpoint_path = "IJCAI/mlp_dict_nx=20_wps5_spd_30_lr0.0001_bs32_optimSGD_ep{}_friction_safe_150cm_train_ep{}.pth".format(prev_epoch, from_epoch)
+#checkpoint_path ="mlp_dict_nx=20_wps5_spd_30_lr0.0001_bs32_optimSGD_ep90999_friction_safe_150cm_train_ep91000.pth"
+#checkpoint_path = "IJCAI/0.01/mlp_dict_nx=20_wps5_spd_30_lr0.0001_bs32_optimSGD_ep94999_friction_safe_150cm_train_ep95000.pth"
+
+model_path = "./checkpoints/" + checkpoint_path
 
 """ Good initial neural controllers
         "mlp_dict_nx=20_wps5_spd_30_lr0.0001_bs32_optimSGD_ep63999_ep66000.pth"
@@ -75,21 +90,26 @@ model_path = "./checkpoints/" + \
         "mlp_dict_nx=20_wps5_spd_30_lr0.0001_bs32_optimSGD_ep90999_friction_safe_150cm_train_ep91000.pth"
         "mlp_dict_nx=20_wps5_spd_30_lr0.0001_bs32_optimSGD_ep91999_friction_safe_150cm_train_ep94000.pth"
 """
-epoch = 70000
-no_interference = False
+""" Best repaired neural policy
+        "mlp_dict_nx=20_wps5_spd_30_lr0.0001_bs32_optimSGD_ep93999_friction_safe_150cm_train_ep95000.pth"
+"""
+
+epoch = 71000
+no_interference = True#False
 save_data = False
 
-
+print("????")
 from model_predicative_control_new import MPCController
 from agents.navigation.my_basic_agent import BasicAgent
 from ilqr.ilqr import ILQRController
-from synchronous_mode_client_control_test_NN import spawn_trolley
+#from synchronous_mode_client_control_test_NN import spawn_trolley
 
 from agents.navigation.my_local_planner import _retrieve_options, RoadOption
 from agents.navigation.my_local_planner import *
 from agents.tools.misc import distance_vehicle, draw_waypoints
 from NN_controller import mlp
-from NN_controller_img import MyCoil
+#from NN_controller_img import MyCoil
+print("All libs are loded")
 
 # set MACROS for data normalization
 max_pos_val = 500
@@ -284,7 +304,7 @@ def verify_avoidance(trajectory, horizon, avoidances, threshold = 1.0):
     
 def get_nn_controller(state, model, device = 'cpu', verbose = False):
     state = torch.from_numpy(state).float().to(device)
-    state = state.view(1, -1)
+    state = state.view(1, -1).cuda()
 
     # print("state", state.size(), state)
     output = model(state) #RuntimeError: size mismatch, m1: [10 x 1], m2: [10 x 100] at /pytorch/aten/src/TH/generic/THTensorMath.cpp:961
@@ -459,6 +479,7 @@ def transform_to_arr(tf):
 # ===============================
 
 def main():
+    print("START...")
     target_waypoints_bak = []
     # Initialize pygame
     pygame.init()
@@ -554,7 +575,7 @@ def main():
         # Initialize an NN controller from file 
         nn_number_waypoints = 5
         model = mlp(nx = (5+3*nn_number_waypoints), ny = 2)
-        checkpoint = torch.load(model_path)
+        checkpoint = torch.load(model_path, map_location = 'cpu')
         model.load_state_dict(checkpoint['model_state_dict'])
         model = model.to(dtype).to(device)
         model.eval()
@@ -590,6 +611,7 @@ def main():
             tot_unsafe_episodes = 0
             tot_interference_episodes = 0
             tot_interference_time = 0
+            tot_loss = 0
             while True:
                 get_event()
                 
@@ -606,6 +628,7 @@ def main():
                         friction_bp, friction_transform, friction_box = config_friction(friction_bp, \
                             location = avoidance, \
                             extent = carla.Location(6., 2., 0.2),\
+                            scale = 1.0e-2,\
                             color = (255, 127, 0))
                         world.debug.draw_box(**friction_box)
                         frictioner = world.spawn_actor(friction_bp, friction_transform)
@@ -702,7 +725,6 @@ def main():
 
                         """ Run ilqr controller
                         """
-                        us_init = 0.0 * us_init
                         # Query future waypoints
                         query_target_waypoints(current_waypoint, \
                             target_speed, ilqr_number_waypoints, ilqr_target_waypoints, \
@@ -712,8 +734,12 @@ def main():
                             world.debug.draw_box(**config_waypoint_box(ilqr_target_waypoint, color = (0, 0, 255)))
                         # Get ilqr control
                         control_ilqr, ilqr_trajectory_pred = get_ilqr_control(measurements, \
-                                controller, ilqr_target_waypoints, avoidances = avoidances, us_init = us_init)
+                                controller, ilqr_target_waypoints, avoidances = avoidances, us_init = 0.0 * us_init)
+                        loss = np.linalg.norm(us_init[0, :] - np.array([control_ilqr.throttle, control_ilqr.steer]), ord = 2)
+                        tot_loss += loss
                         control = control_ilqr
+
+
 
                         print("Verify predicted ilqr trajectory")
                         unsafe = verify_in_lane(ilqr_trajectory_pred, ilqr_number_waypoints, max_distance)
@@ -818,6 +844,7 @@ def main():
             actor.destroy()
 
         avg_spd /= tot_episodes
+        avg_loss = tot_loss / tot_episodes
         print(">>>>>>>>>>> Total episodes: {} episodes||{}s <<<<<<<<<<<<<<".format(tot_episodes, tot_time))
         print(">>>>>>>>>>>>>Total unsafe episodes: {}||{}s<<<<<<<<<<<<<<<<".format(tot_unsafe_episodes,\
                 tot_unsafe_time))
@@ -825,6 +852,8 @@ def main():
                 tot_unsafe_time))
         print(">>>>>>>>>>>>>>Top speed: {} <<<<<<<<<<<<<<<<<<<<<<".format(top_spd))
         print(">>>>>>>>>>>>>>Average speed: {}<<<<<<<<<<<<<<<<<<<".format(avg_spd))
+        print(">>>>>>>>>>>>>>Total loss: {} <<<<<<<<<<<<<<<<<<<<<".format(tot_loss))
+        print(">>>>>>>>>>>>>>Average loss: {}<<<<<<<<<<<<<<<<<<<<".format(avg_loss))
 
         pygame.quit()
         print('done.')

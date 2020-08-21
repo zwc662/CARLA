@@ -15,8 +15,8 @@ def config_waypoint_box(target_waypoint, color = (255, 0, 0)):
     else:
         box=carla.BoundingBox(target_waypoint.transform.location, extent_wp)
         rotation=target_waypoint.transform.rotation
-    life_time= 0.3 * 50
-    thickness=0.01 * 10
+    life_time= 0.3 * 10
+    thickness=0.01 * 1
     color = carla.Color(r=color[0],g=color[1],b=color[2])
     config = {'box': box, \
             'rotation': rotation, \
@@ -31,8 +31,8 @@ def config_measurements_box(measurements, color = (255, 0, 0)):
     
     box=carla.BoundingBox(measurements.t.location, extent_m)
     rotation=measurements.t.rotation
-    life_time= .1 * 100
-    thickness=0.01 * 10
+    life_time= .1 * 1
+    thickness=0.01 * 1
     color = carla.Color(r=color[0],g=color[1],b=color[2])
     config = {'box': box, \
             'rotation': rotation, \
@@ -89,12 +89,12 @@ def choose_spawn_destination(m, spawn_config, **kwargs):
 
     return start_pose, destination
 
-def config_friction(friction_bp, location, extent, color = (255, 0, 0)):
+def config_friction(friction_bp, location, extent, scale = 0.001, color = (255, 0, 0)):
     """ Config and spawn a friction event """
     # friction from blueprint
     # Defind bounding box and location
     friction_extent = extent
-    friction_bp.set_attribute('friction', str(0.001))
+    friction_bp.set_attribute('friction', str(scale))
     friction_bp.set_attribute('extent_x', str(100 * friction_extent.x))
     friction_bp.set_attribute('extent_y', str(100 * friction_extent.y))
     friction_bp.set_attribute('extent_z', str(100 * friction_extent.z))

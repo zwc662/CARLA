@@ -24,9 +24,11 @@ try:
 except IndexError:
     pass
 
+sys.path.append('../carla/')
 import carla
 from utils import *
 
+import agents
 import random
 
 try:
@@ -58,36 +60,60 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 device = 'cpu'
 save_dir_base = 'data/testing/'
 
-prev_epoch = 90999
-from_epoch = 91000
+prev_epoch = 94999
+from_epoch = 97000
 to_epoch = from_epoch + 2000
 
-model_path = "./checkpoints/" + \
-        "mlp_dict_nx=20_wps5_spd_30_lr0.0001_bs32_optimSGD_ep63999_ep66000.pth"
-        #"mlp_dict_nx=20_wps5_spd_30_lr0.0001_bs32_optimSGD_ep{}_friction_safe_150cm_train_ep{}.pth".format(\
-        #prev_epoch, from_epoch)
+# Best minimally deviating"
+checkpoint_path = "IJCAI/100/" + \
+        "mlp_dict_nx=20_wps5_spd_30_lr0.0001_bs32_optimSGD_ep{}_friction_safe_150cm_train_ep{}.pth".format(\
+        prev_epoch, from_epoch)
+stat_type = "minimally_deviating"
+
+checkpoint_path = "mlp_dict_nx=20_wps5_spd_30_lr0.0001_bs32_optimSGD_ep63999_ep66000.pth"
+stat_type = "initial"
 
 """ Good initial neural controllers
         "mlp_dict_nx=20_wps5_spd_30_lr0.0001_bs32_optimSGD_ep90999_friction_safe_150cm_train_ep91000.pth"
         "mlp_dict_nx=20_wps5_spd_30_lr0.0001_bs32_optimSGD_ep91999_friction_safe_150cm_train_ep94000.pth"
 """
 """ Partially good neural controller
+        "mlp_dict_nx=20_wps5_spd_30_lr0.0001_bs32_optimSGD_ep93999_friction_safe_150cm_train_ep95000.pth"
 """
+
+#checkpoint_path = "mlp_dict_nx=20_wps5_spd_30_lr0.0001_bs32_optimSGD_ep70999_friction_safe_150cm_train_ep75000.pth"
+
+#Naive
+#No friction bad
+#checkpoint_path = "IJCAI/mlp_dict_nx=20_wps5_spd_30_lr0.0001_bs32_optimSGD_ep70999_friction_safe_150cm_train_ep76000.pth"
+#OK
+#checkpoint_path = "mlp_dict_nx=20_wps5_spd_30_lr0.0001_bs32_optimSGD_ep90999_friction_safe_150cm_train_ep91000.pth"
+#stat_type = "naive"
+
+#Initial
+#checkpoint_path = "IJCAI/mlp_dict_nx=20_wps5_spd_30_lr0.0001_bs32_optimSGD_ep63999_ep66000.pth"
+
+#Minimal Deivating
+#checkpoint_path = "mlp_dict_nx=20_wps5_spd_30_lr0.0001_bs32_optimSGD_ep94999_friction_safe_150cm_train_ep95000.pth"
+#stat_type = "minimally_deviating"
+
+model_path = "./checkpoints/" + checkpoint_path
+
 epoch = 70000
-no_interference = True
-save_data = False
+no_interference = False 
+save_data = False #True
 
 
 from model_predicative_control_new import MPCController
 from agents.navigation.my_basic_agent import BasicAgent
 from ilqr.ilqr import ILQRController
-from synchronous_mode_client_control_test_NN import spawn_trolley
+#from synchronous_mode_client_control_test_NN import spawn_trolley
 
 from agents.navigation.my_local_planner import _retrieve_options, RoadOption
 from agents.navigation.my_local_planner import *
 from agents.tools.misc import distance_vehicle, draw_waypoints
 from NN_controller import mlp
-from NN_controller_img import MyCoil
+#from NN_controller_img import MyCoil
 
 # set MACROS for data normalization
 max_pos_val = 500
@@ -511,6 +537,7 @@ def main():
 
         # Manually choose destination
         destination = carla.Transform(location = carla.Location(x = 121.678581, y=61.944809, z=-0.010011))
+        destination = carla.Transform(location = carla.Location(x = 121.678581, y=61.944809, z=-0.010011))
         #?????destination = carla.Transform(location=carla.Location(x=-2.419357, y=204.005676, z=1.843104))
         print("destination")
         print(destination)
@@ -539,15 +566,16 @@ def main():
         """
         camera_rgb = world.spawn_actor(
             blueprint_library.find('sensor.camera.rgb'),
+            carla.Transform(carla.Location(x=73, y = 73, z=15), carla.Rotation(pitch=-90, yaw = 0)))
             #starting position
             #carla.Transform(carla.Location(x=110, y =55, z=15), carla.Rotation(pitch=-45, yaw = 180)))
             #friction 
             # Angle
             #carla.Transform(carla.Location(x=58, y = 72, z=15), carla.Rotation(pitch=-45, yaw = -40)))
-            # bird's view
+            # bird's view friction
             #carla.Transform(carla.Location(x=64, y = 70, z=15), carla.Rotation(pitch=-80, yaw = 0)))
-            # closer
-            carla.Transform(carla.Location(x=73, y = 73, z=15), carla.Rotation(pitch=-90, yaw = 0)))
+            # towards center
+            #carla.Transform(carla.Location(x=73, y = 73, z=15), carla.Rotation(pitch=-90, yaw = 0)))
         """
 
 
@@ -581,7 +609,9 @@ def main():
         ilqr_number_waypoints = controller.steps_ahead
 
         """ Collect data to file"""
-        csv_dir = build_file_base(epoch, timestr, spawn_config, nn_number_waypoints, target_speed, info = 'friction_safe_150cm_run') if save_data else None
+        #csv_dir = build_file_base(epoch, timestr, spawn_config, nn_number_waypoints, target_speed, info = 'friction_safe_150cm_run') if save_data else None
+        #csv_dir = "{}_friction_{}.csv".format(stat_type, not no_interference) if save_data else None
+        csv_dir = "{}_SC_friction_{}.csv".format(stat_type, not no_interference) if save_data else None
 
         # Create a synchronous mode context.
         MIN_DISTANCE_PERCENTAGE = 0.9
@@ -605,12 +635,27 @@ def main():
             ilqr_trajectory = [] 
             tot_episodes = 0
             tot_time = 0
+            spd_flg = 0
             top_spd = 0
+            bottom_spd = 10
             avg_spd = 0
+            avg_spd_var = 0
+            avg_dist = 0
+            dists = []
+            avg_dist_var = 0
             tot_unsafe_time = 0
             tot_unsafe_episodes = 0
             tot_interference_episodes = 0
             tot_interference_time = 0
+            tot_loss = 0
+            time_begin = None
+            avg_inf_time = 0
+            tot_inf_time = 0
+            avg_verif_time = 0
+            tot_verif_time = 0
+            avg_int_time = 0
+            tot_int_time = 0
+
             while True:
                 get_event()
                 
@@ -651,13 +696,21 @@ def main():
                 if top_spd <= spd:
                     top_spd = spd
                     print("New top speed: {}".format(top_spd))
+                if spd_flg > 0 and bottom_spd >= spd:
+                    bottom_spd = spd
+                    print("New bottom speed: {}".format(bottom_spd))
+
                 nn_min_distance = MIN_DISTANCE
                 ilqr_min_distance = spd * controller.dt
                 
 
                 # get last waypoint
                 current_waypoint = m.get_waypoint(t.location)
-                if distance_vehicle(current_waypoint, t) > max_distance:
+                current_distance = distance_vehicle(current_waypoint, t)
+                dists.append(current_distance)
+                avg_dist += current_distance
+                avg_dist_var += current_distance**2
+                if current_distance > max_distance:
                     tot_unsafe_episodes += 1
                     tot_unsafe_time += controller.dt
                 
@@ -694,8 +747,14 @@ def main():
 
                     """ Predict future nn trajectory and draw
                     """
+                    inf_time_begin = time.clock()
                     nn_trajectory_pred = get_nn_prediction(m, measurements, controller, model, \
                             ilqr_number_waypoints, target_speed, nn_number_waypoints)
+                    inf_time_end = time.clock()
+                    avg_inf_time = inf_time_end - inf_time_begin
+                    tot_inf_time += 1
+
+
                     state = nn_trajectory_pred.states[0]
                     # Draw predcted measurements
                     
@@ -710,7 +769,13 @@ def main():
                         """ Get output from neural controller
                         """
                         # Visualize
-                        world.debug.draw_box(**config_measurements_box(measurements, color = (255, 0, 0)))
+                        if stat_type == "minimally_deviating":
+                            color = (255, 0, 255)
+                        elif stat_type == "initial":
+                            color = (255, 0, 0)
+                        elif stat_type == "naive":
+                            color = (0, 255, 255)
+                        world.debug.draw_box(**config_measurements_box(measurements, color = color))
 
                         if unsafe: 
                             print("!!!!!!!!!!!!!!\nUNSAFE NN operation number {}".format(unsafe))
@@ -748,8 +813,13 @@ def main():
                         #for ilqr_target_waypoint in ilqr_target_waypoints:
                         #    world.debug.draw_box(**config_waypoint_box(ilqr_target_waypoint, color = (0, 0, 255)))
                         # Get ilqr control
+                        verif_time_begin = time.clock()
                         control_ilqr, ilqr_trajectory_pred = get_ilqr_control(measurements, \
                                 controller, ilqr_target_waypoints, avoidances = avoidances, us_init = us_init)
+                        verif_time_end = time.clock()
+                        avg_verif_time += verif_time_end - verif_time_begin
+                        tot_verif_time += 1
+
                         control = control_ilqr
 
                         print("Verify predicted ilqr trajectory")
@@ -763,6 +833,7 @@ def main():
                         tot_interference_time += controller.dt
 
                         ilqr_trajectory.append([tot_episodes, control.throttle, control.steer, spd])
+
                 
 
                 else:
@@ -786,7 +857,13 @@ def main():
                     #print("Update ILQR steps ahead {}, step length {}".format(controller.steps_ahead,\
                     #        controller.dt))
 
+                    
+                    if spd >= 8.:
+                        spd_flg += 1
+                        if time_begin is None:
+                            time_begin = time.clock()
                     avg_spd += spd
+                    avg_spd_var += (spd - target_speed/3.6)**2 
                     #nn_trajectory.append([control.throttle, control.steer, spd])
 
                     # Collect state-control training data 
@@ -806,6 +883,9 @@ def main():
                             return
 
                     print(">>>>Episode: {}".format(tot_episodes))
+                    time_end = time.clock()
+                    
+
 
 
 
@@ -858,19 +938,35 @@ def main():
         for actor in actor_list:
             actor.destroy()
 
-        avg_spd /= tot_episodes
-        print(">>>>>>>>>>> Total episodes: {} episodes||{}s <<<<<<<<<<<<<<".format(tot_episodes, tot_time))
+        avg_spd /= tot_episodes 
+        avg_spd_var /= tot_episodes
+        avg_spd_var = avg_spd_var
+        avg_dist /= tot_episodes
+        avg_dist_var /= tot_episodes
+        avg_dist_var = avg_dist_var
+
+        diff_dist_var = np.var(np.diff(dists, axis = 0), axis = 0)
+        print(">>>>>>>>>>> Total episodes: {} episodes||pygame time: {}s||Computer time: {}s <<<<<<<<<<<<<<".format(
+            tot_episodes, tot_time, time_end - time_begin))
         print(">>>>>>>>>>>>>Total unsafe episodes: {}||{}s<<<<<<<<<<<<<<<<".format(tot_unsafe_episodes,\
                 tot_unsafe_time))
         print(">>>>>>>>>>>>>>Total interference episodes: {}||{}s<<<<<<<<<".format(tot_interference_episodes,\
                 tot_unsafe_time))
+        print(">>>>>>>>>>>>>Average Distance: {}<<<<<<<<<<<<<<<<<<<<<".format(avg_dist))
+        print(">>>>>>>>>>>>>Average Distance Variance: {}<<<<<<<<<<<<<<<<<<<<<".format(avg_dist_var))
+        print(">>>>>>>>>>>>>Derivative Distance Variance: {}<<<<<<<<<<<<<<<<<<<<<".format(diff_dist_var))
         print(">>>>>>>>>>>>>>Top speed: {} <<<<<<<<<<<<<<<<<<<<<<".format(top_spd))
+        print(">>>>>>>>>>>>>>Bottom speed: {} <<<<<<<<<<<<<<<<<<<<<<".format(bottom_spd))
         print(">>>>>>>>>>>>>>Average speed: {}<<<<<<<<<<<<<<<<<<<".format(avg_spd))
+        print(">>>>>>>>>>>>>Average speed Variance: {}<<<<<<<<<<<<<<<<<<<<<".format(avg_spd_var))
+        print(">>>>>>>>>>>>>Average inference time: {}<<<<<<<<<<<<<<<<<<<<<".format(avg_inf_time/tot_inf_time))
+        print(">>>>>>>>>>>>>Average verification time: {}<<<<<<<<<<<<<<<<".format(avg_verif_time/tot_verif_time))
 
         pygame.quit()
         print('done.')
 
         #pickle.dump((nn_trajectory, ilqr_trajectory), open("./trajectory_" + timestr + ".p", 'wb'))
+        pickle.dump((nn_trajectory), open("./bak/trajectory_safe" + timestr + ".p", 'wb'))
     
 
 

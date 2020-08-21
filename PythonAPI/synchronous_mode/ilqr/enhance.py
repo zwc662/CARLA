@@ -42,7 +42,7 @@ max_speed_val = 40
 class EnhanceCost(Cost):
     """ Quadratic Regulator Instantaneous Cost for trajectory following and barrier function."""
 
-    def __init__(self, model_0, model_1, trajectory, b0, b12, b34, q1, q2, q3, q4, x_path, x_avoids):
+    def __init__(self, model_0, model_1, trajectory, b0, b12, b34, q1, q2, q3, q4, x_path, x_avoids, lagrange):
 
         # State, action and path size
         self.x_path =x_path
@@ -58,6 +58,7 @@ class EnhanceCost(Cost):
         self.q3 = q3
         self.q4 = q4
 
+        self.lagrange = lagrange
         """ F,f are the quadratic and linear costs for the state barrier cost"""
         self.F = np.zeros([self.state_size, self.state_size])
         self.f = np.zeros([self.state_size, 1])
@@ -211,7 +212,7 @@ class EnhanceCost(Cost):
         self._F_pQus_F_T = self.F + self.F.T
 
 
-        self.Qxxs[i] = (self.pixs[i].dot(self.u_diffs[i])).dot(self.u_diffs[i].T.dot(self.pixs[i].T)) * self.b0/4.
+        self.Qxxs[i] = self.lagrange * (self.pixs[i].dot(self.u_diffs[i])).dot(self.u_diffs[i].T.dot(self.pixs[i].T)) * self.b0/4.
 
         return self._F_pQus_F_T + self.Qxxs[i] * 2.0
 
@@ -230,7 +231,7 @@ class EnhanceCost(Cost):
         """
         if terminal:
             return 0
-        self.Quxs[i] = self.u_diffs[i].dot(self.u_diffs[i].T.dot(self.pixs[i].T)) * self.b0/4.
+        self.Quxs[i] = self.lagrange * self.u_diffs[i].dot(self.u_diffs[i].T.dot(self.pixs[i].T)) * self.b0/4.
         return self.Quxs[i] * 2.
 
     def l_uu(self, x, u, i, terminal=False):
@@ -247,7 +248,7 @@ class EnhanceCost(Cost):
         """
         if terminal:
             return 0
-        self.Quus[i] = self.u_diffs[i].dot(self.u_diffs[i].T) * self.b0/4.0
+        self.Quus[i] = self.lagrange * self.u_diffs[i].dot(self.u_diffs[i].T) * self.b0/4.0
 
         return self.Quus[i] * 2.0
     
@@ -261,7 +262,7 @@ class EnhanceCost(Cost):
 class PolicyEnhancer():
     """ An enhancer that uses similar algorithm as iLQR with a different way of defininig the cost
     """
-    def __init__(self, model_0, model_1, steps_ahead = 10, dt = 0.25, l = 1.0, half_width = 2.0):
+    def __init__(self, model_0, model_1, steps_ahead = 10, dt = 0.25, l = 1.0, half_width = 2.0, lagrange = 1.0):
         """Construct an enhancer.
 
         Args:
@@ -289,6 +290,9 @@ class PolicyEnhancer():
         self.half_width = half_width 
         # Current state
         self.measurements = {'posx': None, 'posy': None, 'v': None, 'theta': None}
+
+        # Lagrange parameter 
+        self.lagrange = lagrange
 
        
 
@@ -343,14 +347,14 @@ class PolicyEnhancer():
 
 
     def generate_cost(self, trajectory):
-        b0 = 1.0
+        b0 = 10.0
         # For staying in lane
         q1 = 1.0E-1
         q2 = 1.0E-4
 
         # For avoidance
-        q3 = 0.0 * 1.
-        q4 = 0.0 * 2.0
+        q3 = 10.0 * 1.
+        q4 = 10.0 * 2.0
 
         b12 = self.half_width
         b34 = self.half_width
@@ -358,10 +362,13 @@ class PolicyEnhancer():
         q = np.zeros([self.dynamics.state_size, 1])
         r = np.zeros([self.dynamics.action_size, 1])
 
+        lagrange = self.lagrange
+
         self.model_0.zero_grad()
         self.model_1.zero_grad()
         self.cost = EnhanceCost(self.model_0, self.model_1, trajectory = trajectory, b0 = b0, \
-                b12 = b12, b34 = b34, q1 = q1, q2 = q2, q3 = q3, q4 = q4, x_path = self.x_path, x_avoids = self.x_avoids)
+            b12 = b12, b34 = b34, q1 = q1, q2 = q2, q3 = q3, q4 = q4, \
+            x_path = self.x_path, x_avoids = self.x_avoids, lagrange = lagrange)
 
     def enhance(self, x0, us_init):
         assert us_init.shape[0] == self.steps_ahead

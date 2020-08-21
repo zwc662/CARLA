@@ -23,8 +23,11 @@ try:
 except IndexError:
     pass
 
+sys.path.append('../carla/')
 import carla
 from utils import *
+
+import agents
 
 import random
 
@@ -57,21 +60,38 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 device = 'cpu'
 save_dir_base = 'data/testing/'
 
-prev_epoch = 93999
-from_epoch = 95000
-to_epoch = from_epoch + 2000
+prev_epoch = 75999
+from_epoch = 79000
+to_epoch = from_epoch + 3000
 
-model_path_1 = "./checkpoints/" + \
+model_path_1 = "./checkpoints/IJCAI/1/" + \
         "mlp_dict_nx=20_wps5_spd_30_lr0.0001_bs32_optimSGD_ep{}_friction_safe_150cm_train_ep{}.pth".format(\
         prev_epoch, from_epoch)
 
-model_path_0 = "./checkpoints/" + \
+model_path_0 = "./checkpoints/IJCAI/1/" + \
         "mlp_dict_nx=20_wps5_spd_30_lr0.0001_bs32_optimSGD_ep63999_ep66000.pth"
 
 """ Partially good neural controller
         "mlp_dict_nx=20_wps5_spd_30_lr0.0001_bs32_optimSGD_ep90999_friction_safe_150cm_train_ep91000.pth"
         "mlp_dict_nx=20_wps5_spd_30_lr0.0001_bs32_optimSGD_ep91999_friction_safe_150cm_train_ep94000.pth"
 """
+""" Best repaired neural policy
+        "mlp_dict_nx=20_wps5_spd_30_lr0.0001_bs32_optimSGD_ep9399_friction_safe_150cm_train_ep95000.pth"
+"""
+model_path_1 = "./checkpoints/IJCAI/1e-2/mlp_dict_nx=20_wps5_spd_30_lr0.0001_bs32_optimSGD_ep93999_friction_safe_150cm_train_ep95000.pth"
+
+#model_path_1 = "./checkpoints/IJCAI/mlp_dict_nx=20_wps5_spd_30_lr0.0001_bs32_optimSGD_ep70999_friction_safe_150cm_train_ep75000.pth"
+#model_path_1 = "./checkpoints/IJCAI/100/mlp_dict_nx=20_wps5_spd_30_lr0.0001_bs32_optimSGD_ep96999_friction_safe_150cm_train_ep99000.pth"
+
+#model_path_1 = "./checkpoints/IJCAI/1000/mlp_dict_nx=20_wps5_spd_30_lr0.0001_bs32_optimSGD_ep94999_friction_safe_150cm_train_ep96000.pth"
+#74.43
+
+
+#model_path_1 = "./checkpoints/IJCAI/1000/mlp_dict_nx=20_wps5_spd_30_lr0.0001_bs32_optimSGD_ep96999_friction_safe_150cm_train_ep98000.pth"
+#85.90
+
+#model_path_1 = "./checkpoints/IJCAI/1000/mlp_dict_nx=20_wps5_spd_30_lr0.0001_bs32_optimSGD_ep97999_friction_safe_150cm_train_ep100000.pth"
+
 no_interference = False
 save_data = True
 
@@ -85,7 +105,8 @@ from agents.navigation.my_local_planner import _retrieve_options, RoadOption
 from agents.navigation.my_local_planner import *
 from agents.tools.misc import distance_vehicle, draw_waypoints
 from NN_controller import mlp, enhance_train
-from NN_controller_img import MyCoil
+#from NN_controller_img import MyCoil
+print("Lib loaded")
 
 # set MACROS for data normalization
 max_pos_val = 500
@@ -491,10 +512,12 @@ def transform_to_arr(tf):
 # ===============================
 
 def main():
+    lagrange = 1.0
     target_waypoints_bak = []
     # Initialize pygame
     pygame.init()
     timestr = time.strftime("%Y%m%d-%H%M%S")
+    print("Time: {}".format(timestr))
 
     # Initialize actors, display configuration and clock
     actor_list = []
@@ -594,7 +617,7 @@ def main():
         nn_number_waypoints = 5
 
         model_0 = mlp(nx = (5+3*nn_number_waypoints), ny = 2)
-        checkpoint_0 = torch.load(model_path_0)
+        checkpoint_0 = torch.load(model_path_0, map_location = 'cpu')
         model_0.load_state_dict(checkpoint_0['model_state_dict'])
         model_0 = model_0.to(dtype).to(device)
         model_0.eval()
@@ -602,7 +625,7 @@ def main():
         
 
         model_1 = mlp(nx = (5+3*nn_number_waypoints), ny = 2)
-        checkpoint_1 = torch.load(model_path_1)
+        checkpoint_1 = torch.load(model_path_1, map_location = 'cpu')
         model_1.load_state_dict(checkpoint_1['model_state_dict'])
         model_1 = model_1.to(dtype).to(device)
         model_1.eval()
@@ -613,11 +636,11 @@ def main():
         ilqr_number_waypoints = controller.steps_ahead
 
         # Initialize an enhancer
-        enhancer = PolicyEnhancer(model_0, model_1, steps_ahead = 10, dt = 0.5, l = 1.0, half_width = 1.5)
+        enhancer = PolicyEnhancer(model_0, model_1, steps_ahead = 10, dt = 0.5, l = 1.0, half_width = 1.5, lagrange = lagrange)
         enhance_number_waypoints = enhancer.steps_ahead
 
         """ Collect data to file"""
-        csv_dir = build_file_base(from_epoch, timestr, spawn_config, nn_number_waypoints, target_speed, info = 'friction_safe_150cm_enhance') if save_data else None
+        csv_dir = build_file_base(from_epoch, timestr, spawn_config, nn_number_waypoints, target_speed, info = 'friction_safe_150cm_enhance_lagrange_{}'.format(lagrange)) if save_data else None
 
         # Create a synchronous mode context.
         MIN_DISTANCE_PERCENTAGE = 0.9
@@ -646,6 +669,7 @@ def main():
             tot_unsafe_episodes = 0
             tot_interference_episodes = 0
             tot_interference_time = 0
+            tot_loss = 0
             while True:
                 get_event()
                 
@@ -724,6 +748,10 @@ def main():
                     """
                     nn_trajectory_pred = get_nn_prediction(m, measurements, controller, model_1, \
                             ilqr_number_waypoints, target_speed, nn_number_waypoints)
+                    nn_trajectory_pred_0 = get_nn_prediction(m, measurements, controller, model_0, \
+                            ilqr_number_waypoints, target_speed, nn_number_waypoints)
+                    loss = np.linalg.norm(nn_trajectory_pred.us[0] - nn_trajectory_pred_0.us[0], ord = 2)
+                    tot_loss += loss
                     
                     state = nn_trajectory_pred.states[0]
                     # Draw predcted measurements
@@ -754,6 +782,8 @@ def main():
                         control_enhance, enhance_trajectory_pred = get_enhance_control(measurements, \
                                 enhancer, enhance_target_waypoints, nn_trajectory_pred, avoidances = avoidances)
                         control = control_enhance
+
+
                     else:
                         print("!!!!!!!!!!!!!!\nUNSAFE NN operation number {}".format(unsafe))
                         print("!!!!!!!!!!!!!!")
@@ -886,6 +916,7 @@ def main():
             actor.destroy()
 
         avg_spd /= tot_episodes
+        avg_loss = tot_loss / tot_episodes
         print(">>>>>>>>>>> Total episodes: {} episodes||{}s <<<<<<<<<<<<<<".format(tot_episodes, tot_time))
         print(">>>>>>>>>>>>>Total unsafe episodes: {}||{}s<<<<<<<<<<<<<<<<".format(tot_unsafe_episodes,\
                 tot_unsafe_time))
@@ -893,6 +924,8 @@ def main():
                 tot_unsafe_time))
         print(">>>>>>>>>>>>>>Top speed: {} <<<<<<<<<<<<<<<<<<<<<<".format(top_spd))
         print(">>>>>>>>>>>>>>Average speed: {}<<<<<<<<<<<<<<<<<<<".format(avg_spd))
+        print(">>>>>>>>>>>>>>Total loss: {} <<<<<<<<<<<<<<<<<<<<<".format(tot_loss))
+        print(">>>>>>>>>>>>>>Average loss: {}<<<<<<<<<<<<<<<<<<<<".format(avg_loss))
 
         pygame.quit()
         print('done.')
@@ -904,9 +937,12 @@ def main():
 if __name__ == '__main__':
 
     try:
-        #should_slip = True
-        #main()
-        enhance_train(prev_epoch, from_epoch, to_epoch)
+        while to_epoch < 100000:
+            should_slip = True
+            main()
+            enhance_train(prev_epoch, from_epoch, to_epoch)
+            prev_epoch = from_epoch - 1
+            from_epoch += to_epoch
 
     except KeyboardInterrupt:
         print('\nCancelled by user. Bye!')
